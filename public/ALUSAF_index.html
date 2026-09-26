@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101a24">
+<title>AluSaf — Ish boshqaruvi</title>
+<style>
+:root{font:15px/1.45 system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:#eaf3fa;background:#0c131b;--box:#17222e;--line:#334657;--accent:#c5fa7d;--muted:#b2c3d3;--bad:#ff9994}
+*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button{cursor:pointer}h1,h2,h3{margin:0 0 12px}h1{font-size:clamp(24px,4vw,34px)}h2{font-size:20px}p{margin:8px 0}.shell{max-width:1200px;margin:auto;padding:18px}.login{min-height:96vh;display:grid;place-items:center;padding:18px}.login .box{width:min(100%,450px)}.box{background:var(--box);border:1px solid var(--line);border-radius:18px;padding:20px}.brand{color:var(--accent);letter-spacing:.25em;font-weight:900;font-size:20px}.muted{color:var(--muted)}.small{font-size:13px}.form{display:grid;gap:11px}.form label{display:grid;gap:5px;color:var(--muted);font-size:13px}.form input,.form select,.form textarea{background:#0e1822;border:1px solid #405466;border-radius:11px;color:#fff;padding:11px;width:100%}.form textarea{min-height:80px}.btn{border:0;background:var(--accent);color:#10200f;padding:12px 15px;font-weight:800;border-radius:12px}.btn.secondary{background:transparent;color:#f5f8fb;border:1px solid #6a7e90}.btn.danger{background:#712e36;color:white}.btn.small{padding:8px 10px;font-size:13px}.btn:disabled{opacity:.55}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.stack{display:grid;gap:14px}.two{display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.stat{background:var(--box);border:1px solid var(--line);border-radius:14px;padding:15px}.stat b{display:block;font-size:20px;margin-top:6px}.nav{display:flex;overflow:auto;gap:8px;padding:17px 0}.nav .btn{white-space:nowrap}.nav .selected{background:#fff;color:#0c131b}.line{padding:12px 0;border-top:1px solid var(--line)}.line:first-of-type{border-top:0}.pill{padding:4px 9px;border-radius:30px;background:#304a43;color:var(--accent);font-size:12px}.warning{border:1px solid #9b763e;background:#4a3920;padding:13px;border-radius:12px}.bad{color:var(--bad)}.good{color:var(--accent)}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:530px}th,td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}th{color:var(--muted);font-size:13px}.empty{color:var(--muted);padding:30px;text-align:center;border:1px dashed #5f7080;border-radius:13px}.toast{position:fixed;bottom:16px;right:16px;left:16px;max-width:540px;margin-left:auto;border-radius:12px;padding:14px;background:#28513a;color:white;box-shadow:0 8px 30px #0009;z-index:99}.toast.error{background:#77383e}.subtle{border-top:1px solid var(--line);padding-top:13px}hr{border:0;border-top:1px solid var(--line);margin:14px 0}a{color:var(--accent)}@media(max-width:850px){.two{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}@media(max-width:500px){.shell{padding:12px}.box{padding:15px}.stat{padding:12px}.stat b{font-size:17px}}
+</style>
+</head>
+<body>
+<div id="app" class="login"><section class="box"><div class="brand">ALUSAF</div><p>Yuklanmoqda...</p></section></div>
+<div id="message" aria-live="polite"></div>
+<script type="module">
+import {createClient} from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+// FAQAT IKKITA QIYMATNI almashtiring. Secret / service_role kalitini YOZMANG!
+const SUPABASE_URL = 'SUPABASE_PROJECT_URL_SHU_YERGA';
+const SUPABASE_PUBLISHABLE_KEY = 'SUPABASE_PUBLISHABLE_KEY_SHU_YERGA';
+
+const app=document.querySelector('#app');
+const state={user:null,profile:null,profiles:[],projects:[],assignments:[],expenses:[],payments:[],logs:[],tab:'home',authMode:'login'};
+const money=n=>new Intl.NumberFormat('uz-UZ',{maximumFractionDigits:0}).format(Number(n||0))+' so‘m';
+const nfmt=n=>new Intl.NumberFormat('uz-UZ',{maximumFractionDigits:2}).format(Number(n||0));
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dateLocal=()=>new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+const admin=()=>state.profile?.role==='admin';
+const manager=()=>['admin','boss'].includes(state.profile?.role);
+const projectName=id=>state.projects.find(p=>p.id===id)?.name||'Obyekt';
+const workerName=id=>state.profiles.find(p=>p.id===id)?.full_name||'Ishchi';
+const nameOfRole={pending:'Kutilmoqda',worker:'Ishchi',boss:'Boshliq',admin:'Admin'};
+const categories=['Alukobond','Profil','Samorez','Karkas','Ishchi haqi','Transport','Rover / bukish','Soliq','Boshqa'];
+function toast(m,error=false){let b=document.querySelector('#message');b.innerHTML='<div class="toast '+(error?'error':'')+'">'+esc(m)+'</div>';setTimeout(()=>b.innerHTML='',5500);}
+function fail(error){toast(error?.message||String(error),true);console.error(error);}
+const configReady=SUPABASE_URL.startsWith('https://')&&SUPABASE_URL.endsWith('.supabase.co')&&SUPABASE_PUBLISHABLE_KEY.length>20;
+if(!configReady){app.innerHTML='<main class="login"><section class="box"><div class="brand">ALUSAF</div><h1>Saytni ulash</h1><p>GitHub’dagi <code>public/index.html</code> ichidagi SUPABASE_URL va SUPABASE_PUBLISHABLE_KEY qiymatlarini yangi Supabase loyihangiznikiga almashtiring.</p><p class="muted">Bu yerga faqat Publishable kalitni kiriting, Secret kalitni emas.</p></section></main>';}
+const db=configReady?createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
+const get=async(table,query)=>{let q=db.from(table).select('*');if(query)q=query(q);const {data,error}=await q;if(error)throw error;return data||[];};
+function optionsProjects(){return state.projects.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>').join('');}
+function optionsWorkers(){return state.profiles.filter(p=>p.role==='worker'&&p.active).map(p=>'<option value="'+esc(p.id)+'">'+esc(p.full_name)+' ('+esc(p.email)+')</option>').join('');}
+function totals(projectId){
+ const p=state.projects.find(x=>x.id===projectId)||{};
+ const contract=Number(p.agreed_total)>0?Number(p.agreed_total):Number(p.area_m2||0)*Number(p.sale_price_m2||0);
+ const paid=state.payments.filter(x=>x.project_id===projectId).reduce((s,x)=>s+Number(x.amount),0);
+ const cost=state.expenses.filter(x=>x.project_id===projectId).reduce((s,x)=>s+Number(x.total),0);
+ const acpM2=state.expenses.filter(x=>x.project_id===projectId&&x.category==='Alukobond').reduce((s,x)=>s+Number(x.qty||0)*Number(x.width_m||0)*Number(x.height_m||0),0);
+ const done=state.logs.filter(x=>x.project_id===projectId).reduce((s,x)=>s+Number(x.completed_m2||0),0);
+ return {contract,paid,cost,acpM2,done,unpaid:contract-paid,cash:paid-cost,estimate:contract-cost};
+}
+function renderAuth(){const reg=state.authMode==='register',reset=state.authMode==='reset';app.className='login';app.innerHTML='<section class="box stack"><div><div class="brand">ALUSAF</div><h1>'+(reg?'Yangi akkaunt':reset?'Parolni tiklash':'Saytga kirish')+'</h1><p class="muted">'+(reg?'Ro‘yxatdan o‘tgach administrator lavozim va obyekt biriktiradi.':reset?'Email manzilingizga parol tiklash havolasini yuboramiz.':'Login yoki email va parolingizni kiriting.')+'</p></div>'+
+'<form class="form" id="authForm">'+
+(reg?'<label>Ism-familiya<input name="full_name" required maxlength="90" autocomplete="name"></label><label>Telefon<input name="phone" maxlength="25" placeholder="+998..." autocomplete="tel"></label>':'')+
+'<label>'+(reg||reset?'Email':'Login yoki email')+'<input name="login" required maxlength="160" '+(reg||reset?'type="email"':'')+' autocomplete="username" placeholder="'+(reg||reset?'Email manzilingiz':'Login yoki email')+'"></label>'+
+(reset?'':'<label>Parol<input name="password" type="password" required minlength="10" maxlength="128" autocomplete="'+(reg?'new-password':'current-password')+'"></label>')+
+'<button class="btn" type="submit">'+(reg?'Ro‘yxatdan o‘tish':reset?'Tiklash havolasini yuborish':'Kirish')+'</button></form>'+
+'<button class="btn secondary" data-action="auth-switch" data-mode="'+(reg||reset?'login':'register')+'">'+(reg||reset?'Kirishga qaytish':'Yangi akkaunt yaratish')+'</button>'+
+(!reg&&!reset?'<button class="btn secondary" data-action="auth-switch" data-mode="reset">Parolni unutdingizmi?</button>':'')+'</section>';}
+function renderPending(){app.className='login';app.innerHTML='<section class="box stack"><div class="brand">ALUSAF</div><h1>Akkauntingiz ochildi</h1><p class="muted">Hozircha panel bo‘sh. Administrator sizga lavozim va obyekt biriktirgach foydalanishingiz mumkin.</p><p>Hisob: <b>'+esc(state.user.email)+'</b></p><div class="row"><button class="btn" data-action="refresh">Yangilash</button><button class="btn secondary" data-action="logout">Chiqish</button></div><details><summary>Parolni almashtirish</summary>'+passwordForm()+'</details></section>';}
+function passwordForm(){return '<form class="form" id="passwordForm" style="margin-top:12px"><label>Hozirgi parol<input type="password" name="current" minlength="10" required autocomplete="current-password"></label><label>Yangi parol (kamida 12 belgi)<input type="password" name="next" minlength="12" required autocomplete="new-password"></label><label>Yangi parolni takrorlang<input type="password" name="repeat" minlength="12" required autocomplete="new-password"></label><button class="btn">Parolni almashtirish</button></form>';}
+function projectCard(p){const t=manager()?totals(p.id):null;return '<div class="line"><div class="row"><div><b>'+esc(p.name)+'</b> <span class="pill">'+esc(p.status)+'</span><div class="muted small">'+esc(p.address||'')+' · '+nfmt(p.area_m2)+' m²'+(manager()?' · '+esc(p.client_name||'')+' · '+esc(p.client_phone||''):'')+'</div></div>'+(admin()?'<select data-action="status" data-id="'+esc(p.id)+'"><option selected disabled>Holat</option>'+['Yangi','Jarayonda','To‘xtagan','Tugagan'].map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('')+'</select>':'')+'</div>'+(t?'<p class="small muted">Kelishilgan: '+money(t.contract)+' · To‘langan: '+money(t.paid)+' · Xarajat: '+money(t.cost)+' · Hisobiy foyda: '+money(t.estimate)+' · Ishlangan: '+nfmt(t.done)+' m² · ACP: '+nfmt(t.acpM2)+' m²</p>':'')+'</div>';}
+function overview(){let ts=state.projects.map(p=>totals(p.id));let sum=k=>ts.reduce((s,t)=>s+t[k],0);return '<div class="stack">'+(manager()?'<div class="stats">'+[['Kelishilgan qiymat',sum('contract')],['Olingan to‘lov',sum('paid')],['Kiritilgan xarajat',sum('cost')],['Hisobiy foyda*',sum('estimate')]].map(x=>'<div class="stat"><span>'+x[0]+'</span><b>'+money(x[1])+'</b></div>').join('')+'</div><p class="muted small">* Barcha xarajatlar, ish haqi va soliqlar to‘liq kiritilgandagina haqiqiy sof foydaga yaqin bo‘ladi. Olingan to‘lovlardan xarajatlarni ayirish — hozirgi pul oqimi, sof foyda emas.</p>':'<div class="box"><h2>Mening ishlarim</h2><p>Faqat biriktirilgan obyektlaringiz ko‘rinadi.</p></div>')+'<section class="box"><h2>Obyektlar ('+state.projects.length+')</h2>'+(state.projects.length?state.projects.map(projectCard).join(''):'<div class="empty">Hali obyekt yo‘q yoki sizga biriktirilmagan.</div>')+'</section>'+(manager()?'<section class="box"><h2>Jamoa hisoboti</h2>'+logTable(state.logs.slice(0,15))+'</section>':'<section class="box"><h2>Mening so‘nggi hisobotim</h2>'+logTable(state.logs.slice(0,10))+'</section>')+'</div>';}
+function projectSection(){return '<div class="two">'+(admin()?'<form id="projectForm" class="box form"><h2>Yangi obyekt</h2><label>Obyekt nomi<input name="name" required maxlength="160"></label><label>Mijoz ismi<input name="client_name" maxlength="120"></label><label>Mijoz telefoni<input name="client_phone" maxlength="30"></label><label>Manzil<input name="address" maxlength="200"></label><label>Maydon (m²)<input name="area_m2" type="number" min="0" step="0.001"></label><label>1 m² uchun kelishilgan narx<input name="sale_price_m2" type="number" min="0" step="0.01"></label><label>Jami shartnoma summasi (ixtiyoriy)<input name="agreed_total" type="number" min="0" step="0.01" placeholder="Bo‘sh bo‘lsa m² × narx"></label><button class="btn">Obyektni saqlash</button></form>':'')+'<section class="box"><h2>Obyektlar ro‘yxati</h2>'+(state.projects.length?state.projects.map(projectCard).join(''):'<div class="empty">Hali obyekt yo‘q.</div>')+'</section></div>';}
+function expenseSection(){if(!manager())return '<div class="empty">Ruxsat yo‘q.</div>';return '<div class="two">'+(admin()?'<form id="expenseForm" class="box form"><h2>Haqiqiy xarajat</h2><label>Obyekt<select name="project_id" required><option value="">Tanlang</option>'+optionsProjects()+'</select></label><label>Xarajat turi<select name="category">'+categories.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select></label><label>Nima sotib olindi / xarajat nomi<input name="item_name" required maxlength="160" placeholder="Masalan, oq ACP 4 mm"></label><label>Miqdor<input name="qty" type="number" step="0.001" min="0.001" required></label><label>Birlik<select name="unit"><option>list</option><option>dona</option><option>metr</option><option>m²</option><option>kun</option><option>reys</option><option>xizmat</option></select></label><label>Shu safargi birlik narxi (so‘m)<input name="unit_price" type="number" step="0.01" min="0" required></label><div class="row"><label>ACP list eni (m)<input name="width_m" type="number" step="0.001" min="0.001" placeholder="1.22"></label><label>ACP list bo‘yi (m)<input name="height_m" type="number" step="0.001" min="0.001" placeholder="2.44"></label></div><label>Sana<input name="expense_date" type="date" value="'+dateLocal()+'" required></label><label>Izoh<input name="note" maxlength="500"></label><button class="btn">Xarajatni saqlash</button></form>':'')+'<section class="box"><h2>Xarajatlar</h2><div class="tablewrap"><table><thead><tr><th>Obyekt / sana</th><th>Material</th><th>Miqdor × narx</th><th>Jami</th></tr></thead><tbody>'+state.expenses.map(x=>'<tr><td>'+esc(projectName(x.project_id))+'<br><span class="muted">'+esc(x.expense_date)+'</span></td><td>'+esc(x.category)+' / '+esc(x.item_name)+'</td><td>'+nfmt(x.qty)+' '+esc(x.unit)+' × '+money(x.unit_price)+(x.category==='Alukobond'&&x.width_m&&x.height_m?'<br><span class="muted">'+nfmt(x.qty*x.width_m*x.height_m)+' m² list maydoni</span>':'')+'</td><td>'+money(x.total)+'</td></tr>').join('')+'</tbody></table></div>'+(state.expenses.length?'':'<div class="empty">Xarajat kiritilmagan.</div>')+'</section></div>';}
+function paymentSection(){if(!manager())return '<div class="empty">Ruxsat yo‘q.</div>';return '<div class="two">'+(admin()?'<form id="paymentForm" class="box form"><h2>Mijoz to‘lovi</h2><label>Obyekt<select name="project_id" required><option value="">Tanlang</option>'+optionsProjects()+'</select></label><label>Olingan summa (so‘m)<input name="amount" type="number" min="1" step="0.01" required></label><label>Sana<input name="payment_date" type="date" value="'+dateLocal()+'" required></label><label>Izoh<input name="note" maxlength="400" placeholder="Avans, keyingi to‘lov..."></label><button class="btn">To‘lovni saqlash</button></form>':'')+'<section class="box"><h2>To‘lovlar</h2>'+state.payments.map(x=>'<div class="line"><b>'+money(x.amount)+'</b><div class="muted small">'+esc(projectName(x.project_id))+' · '+esc(x.payment_date)+' · '+esc(x.note||'')+'</div></div>').join('')+(state.payments.length?'':'<div class="empty">Hali to‘lov yo‘q.</div>')+'</section></div>';}
+function logTable(logs){if(!logs.length)return '<div class="empty">Hali ish hisoboti yo‘q.</div>';return '<div class="tablewrap"><table><thead><tr><th>Sana</th><th>Kim / obyekt</th><th>m²</th><th>Kelgan / ketgan</th><th>Bajarilgan ish</th></tr></thead><tbody>'+logs.map(x=>'<tr><td>'+esc(x.work_date)+'</td><td>'+esc(workerName(x.worker_id))+'<br>'+esc(projectName(x.project_id))+'</td><td>'+nfmt(x.completed_m2)+'</td><td>'+esc(x.arrived_at||'—')+' / '+esc(x.left_at||'—')+'</td><td>'+esc(x.note)+'</td></tr>').join('')+'</tbody></table></div>';}
+function workSection(){const canLog=state.profile.role==='worker';return '<div class="two">'+(canLog?'<form id="logForm" class="box form"><h2>Bugungi ish hisoboti</h2><label>Biriktirilgan obyekt<select name="project_id" required><option value="">Tanlang</option>'+optionsProjects()+'</select></label><label>Sana<input name="work_date" type="date" value="'+dateLocal()+'" required></label><label>Kelgan vaqt<input name="arrived_at" type="time"></label><label>Ketgan vaqt<input name="left_at" type="time"></label><label>Bajarilgan ish (m²)<input name="completed_m2" type="number" min="0" step="0.001" required></label><label>Bugun nima ish qilindi?<textarea name="note" required maxlength="1500"></textarea></label><button class="btn">Hisobotni yuborish</button></form>':'')+'<section class="box"><h2>'+(manager()?'Barcha ishchilar':'Mening')+' ish hisobotlari</h2>'+logTable(state.logs)+'</section></div>';}
+function staffSection(){if(!admin())return '<div class="empty">Ruxsat yo‘q.</div>';return '<div class="two"><section class="box"><h2>Lavozim berish</h2><p class="muted small">Yangi akkaunt avval Kutilmoqda bo‘ladi. Kimligini tekshirganingizdan keyin lavozim tayinlang.</p>'+state.profiles.filter(x=>x.id!==state.user.id).map(p=>'<div class="line"><b>'+esc(p.full_name||p.email)+'</b><div class="muted small">'+esc(p.email)+' · '+esc(p.phone||'')+'</div><form class="row" data-role-form="'+esc(p.id)+'"><select name="role"><option value="pending" '+(p.role==='pending'?'selected':'')+'>Kutilmoqda</option><option value="worker" '+(p.role==='worker'?'selected':'')+'>Ishchi</option><option value="boss" '+(p.role==='boss'?'selected':'')+'>Boshliq</option></select><button class="btn small">Saqlash</button></form></div>').join('')+'</section><div class="stack"><form class="box form" id="assignForm"><h2>Ishchini obyektga biriktirish</h2><label>Ishchi<select name="worker_id" required><option value="">Tanlang</option>'+optionsWorkers()+'</select></label><label>Obyekt<select name="project_id" required><option value="">Tanlang</option>'+optionsProjects()+'</select></label><button class="btn">Biriktirish</button></form><section class="box"><h2>Biriktirilganlar</h2>'+state.assignments.map(a=>'<div class="line row"><span>'+esc(workerName(a.worker_id))+' → '+esc(projectName(a.project_id))+'</span><button class="btn danger small" data-action="unassign" data-user="'+esc(a.worker_id)+'" data-project="'+esc(a.project_id)+'">Olib tashlash</button></div>').join('')+(state.assignments.length?'':'<div class="empty">Biriktirilganlar yo‘q.</div>')+'</section></div></div>';}
+function profileSection(){return '<section class="box stack" style="max-width:510px"><div><h2>Mening hisobim</h2><p>'+esc(state.profile.full_name)+' · '+esc(nameOfRole[state.profile.role])+'</p><p class="muted">'+esc(state.profile.email)+'</p></div><hr><h2>Parolni almashtirish</h2>'+passwordForm()+'</section>';}
+function renderDashboard(){app.className='shell';const tabs=[['home','Hisobot'],['projects','Obyektlar'],...(manager()?[['expenses','Xarajatlar'],['payments','To‘lovlar']]:[]),['work','Ish hisoboti'],...(admin()?[['staff','Xodimlar']]:[]),['profile','Parol']];if(!tabs.some(x=>x[0]===state.tab))state.tab='home';const content={home:overview,projects:projectSection,expenses:expenseSection,payments:paymentSection,work:workSection,staff:staffSection,profile:profileSection};app.innerHTML='<header class="row"><div><div class="brand">ALUSAF</div><h1>Ish boshqaruvi</h1><p class="muted small">'+esc(state.profile.full_name)+' · '+esc(nameOfRole[state.profile.role])+'</p></div><div class="row"><button class="btn secondary small" data-action="refresh">Yangilash</button><button class="btn secondary small" data-action="logout">Chiqish</button></div></header><nav class="nav">'+tabs.map(x=>'<button class="btn '+(state.tab===x[0]?'selected':'secondary')+'" data-action="tab" data-tab="'+x[0]+'">'+x[1]+'</button>').join('')+'</nav><main>'+content[state.tab]()+'</main>';}
+function render(){if(!state.user)return renderAuth();if(!state.profile||state.profile.role==='pending'||!state.profile.active)return renderPending();renderDashboard();}
+async function load(){
+ if(!db)return;
+ const {data:{user},error:authErr}=await db.auth.getUser();if(authErr&&!user){state.user=null;render();return;}
+ state.user=user;if(!user){state.profile=null;render();return;}
+ const ps=await get('afs_profiles',q=>q.eq('id',user.id));state.profile=ps[0]||null;
+ if(!state.profile||state.profile.role==='pending'||!state.profile.active){state.projects=[];state.logs=[];render();return;}
+ const isManager=manager();
+ const [projects,logs,...more]=await Promise.all([
+   get('afs_projects',q=>q.order('created_at',{ascending:false})),
+   get('afs_work_logs',q=>q.order('work_date',{ascending:false}).limit(500)),
+   ...(isManager?[get('afs_profiles',q=>q.order('created_at',{ascending:false})),get('afs_assignments'),get('afs_expenses',q=>q.order('expense_date',{ascending:false})),get('afs_payments',q=>q.order('payment_date',{ascending:false}))]:[])
+ ]);
+ state.projects=projects;state.logs=logs;
+ if(isManager){[state.profiles,state.assignments,state.expenses,state.payments]=more;}
+ else {state.profiles=[state.profile];state.assignments=[];state.expenses=[];state.payments=[];}
+ render();
+}
+async function submitAuth(form){const f=new FormData(form),login=String(f.get('login')).trim(),password=String(f.get('password')||'');if(state.authMode==='reset'){
+ const {error}=await db.auth.resetPasswordForEmail(login,{redirectTo:location.origin});if(error)throw error;toast('Emailingizga tiklash havolasi yuborildi.');state.authMode='login';renderAuth();return;
+ }
+ if(state.authMode==='register'){
+ if(password.length<10)throw Error('Parol kamida 10 belgidan iborat bo‘lsin.');
+ const {data,error}=await db.auth.signUp({email:login,password,options:{data:{full_name:String(f.get('full_name')).trim(),phone:String(f.get('phone')||'').trim()},emailRedirectTo:location.origin}});
+ if(error)throw error;toast(data.session?'Akkaunt yaratildi. Administrator tasdiqlashini kuting.':'Ro‘yxatdan o‘tish yuborildi. Emailingizni tasdiqlang.');state.authMode='login';await load();return;
+ }
+ let email=login;
+ if(!login.includes('@')){const {data,error}=await db.rpc('afs_admin_login_email',{p_username:login});if(error)throw error;email=data||'';}
+ if(!email)throw Error('Login yoki parol noto‘g‘ri.');
+ const {error}=await db.auth.signInWithPassword({email,password});if(error)throw Error('Login yoki parol noto‘g‘ri. Email tasdiqlanmagan bo‘lsa, pochtangizni tekshiring.');state.tab='home';await load();
+}
+async function submitPassword(form){const f=new FormData(form),old=String(f.get('current')||''),next=String(f.get('next')||'');if(next.length<12)throw Error('Yangi parol kamida 12 belgi bo‘lsin.');if(next!==String(f.get('repeat')))throw Error('Yangi parollar bir xil emas.');
+ const {error:loginErr}=await db.auth.signInWithPassword({email:state.user.email,password:old});if(loginErr)throw Error('Hozirgi parol noto‘g‘ri.');
+ const {error}=await db.auth.updateUser({password:next});if(error)throw error;form.reset();toast('Parol muvaffaqiyatli almashtirildi.');}
+const values=f=>Object.fromEntries(new FormData(f));
+async function save(table,row){const {error}=await db.from(table).insert(row);if(error)throw error;}
+if(db){
+ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.target,btn=form.querySelector('button[type="submit"],button.btn');if(btn)btn.disabled=true;
+  try{
+   if(form.id==='authForm'){await submitAuth(form);return;}
+   if(form.id==='passwordForm'){await submitPassword(form);return;}
+   if(form.dataset.roleForm){if(!admin())throw Error('Ruxsat yo‘q.');const role=values(form).role;if(!['pending','worker','boss'].includes(role))throw Error('Noto‘g‘ri lavozim');const {error}=await db.from('afs_profiles').update({role}).eq('id',form.dataset.roleForm);if(error)throw error;toast('Lavozim saqlandi.');await load();return;}
+   if(form.id==='projectForm'){if(!admin())throw Error('Ruxsat yo‘q');const v=values(form);await save('afs_projects',{name:v.name,client_name:v.client_name,client_phone:v.client_phone,address:v.address,area_m2:Number(v.area_m2||0),sale_price_m2:Number(v.sale_price_m2||0),agreed_total:Number(v.agreed_total||0),status:'Yangi'});}
+   if(form.id==='expenseForm'){if(!admin())throw Error('Ruxsat yo‘q');const v=values(form);await save('afs_expenses',{project_id:v.project_id,category:v.category,item_name:v.item_name,qty:Number(v.qty),unit:v.unit,unit_price:Number(v.unit_price),width_m:v.width_m?Number(v.width_m):null,height_m:v.height_m?Number(v.height_m):null,expense_date:v.expense_date,note:v.note});}
+   if(form.id==='paymentForm'){if(!admin())throw Error('Ruxsat yo‘q');const v=values(form);await save('afs_payments',{project_id:v.project_id,amount:Number(v.amount),payment_date:v.payment_date,note:v.note});}
+   if(form.id==='logForm'){if(state.profile.role!=='worker')throw Error('Ruxsat yo‘q');const v=values(form);await save('afs_work_logs',{project_id:v.project_id,worker_id:state.user.id,work_date:v.work_date,arrived_at:v.arrived_at||null,left_at:v.left_at||null,completed_m2:Number(v.completed_m2),note:v.note});}
+   if(form.id==='assignForm'){if(!admin())throw Error('Ruxsat yo‘q');const v=values(form);await save('afs_assignments',{worker_id:v.worker_id,project_id:v.project_id});}
+   toast('Saqlandi.');await load();
+  }catch(err){fail(err)}finally{if(btn)btn.disabled=false;}
+ });
+ document.addEventListener('click',async e=>{let btn=e.target.closest('button[data-action]');if(!btn)return;
+  const action=btn.dataset.action;try{
+   if(action==='auth-switch'){state.authMode=btn.dataset.mode;renderAuth();return;}
+   if(action==='tab'){state.tab=btn.dataset.tab;renderDashboard();return;}
+   if(action==='refresh'){await load();toast('Yangilandi.');return;}
+   if(action==='logout'){await db.auth.signOut();state.user=null;state.profile=null;state.authMode='login';renderAuth();return;}
+   if(action==='unassign'){if(!admin())throw Error('Ruxsat yo‘q');const {error}=await db.from('afs_assignments').delete().eq('worker_id',btn.dataset.user).eq('project_id',btn.dataset.project);if(error)throw error;await load();toast('Biriktirish olib tashlandi.');}
+  }catch(err){fail(err)}
+ });
+ document.addEventListener('change',async e=>{const el=e.target;if(el.dataset.action!=='status')return;try{if(!admin())throw Error('Ruxsat yo‘q');const {error}=await db.from('afs_projects').update({status:el.value}).eq('id',el.dataset.id);if(error)throw error;await load();toast('Holat o‘zgardi.');}catch(err){fail(err)}});
+ db.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){state.user=null;state.profile=null;renderAuth();}});
+ load().catch(fail);
+}
+</script>
+</body>
+</html>
