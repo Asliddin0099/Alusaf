@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#101820" />
+  <title>AluSaf — Obyekt va jamoa boshqaruvi</title>
+  <style>
+    :root{--bg:#0c131b;--panel:#151f2a;--edge:#30404f;--txt:#eff7fc;--sub:#aebfcd;--accent:#bce873;--warn:#ffc673;--danger:#ff938d}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{background:var(--bg);color:var(--txt);font:15px/1.5 system-ui,-apple-system,Segoe UI,Arial,sans-serif;margin:0}
+    button,input,select,textarea{font:inherit}button{cursor:pointer}a{color:var(--accent)}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(23px,4vw,34px)}h2{font-size:19px;margin-bottom:13px}h3{font-size:16px}
+    .shell{max-width:1190px;margin:auto;padding:18px}.logo{letter-spacing:.25em;font-weight:900;color:var(--accent);font-size:20px}.muted{color:var(--sub)}.small{font-size:12px}.top{display:flex;justify-content:space-between;gap:15px;align-items:center;margin:5px 0 17px}
+    .panel{background:var(--panel);border:1px solid var(--edge);border-radius:18px;padding:19px}.stack{display:grid;gap:14px}.cols{display:grid;grid-template-columns:minmax(260px,370px) 1fr;gap:14px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.stat{background:var(--panel);border:1px solid var(--edge);border-radius:15px;padding:18px}.stat b{display:block;font-size:clamp(18px,2vw,24px);margin-top:4px}.stat span{font-size:12px;color:var(--sub)}
+    .form{display:grid;gap:11px}label{display:grid;gap:5px;color:var(--sub);font-size:13px}input,select,textarea{background:#0e1721;color:var(--txt);border:1px solid #3a4d5e;border-radius:11px;padding:11px;width:100%;outline:none}input:focus,select:focus,textarea:focus{border-color:var(--accent)}textarea{min-height:74px;resize:vertical}
+    .btn{background:var(--accent);color:#152113;border:0;border-radius:11px;padding:11px 15px;font-weight:760}.btn:hover{filter:brightness(1.08)}.btn:disabled{opacity:.5;cursor:wait}.outline{background:transparent;color:var(--txt);border:1px solid #637183}.danger{border-color:#aa5960;color:var(--danger)}.sm{padding:7px 10px;font-size:13px}.nav{display:flex;gap:8px;overflow:auto;padding:0 0 14px}.nav button{border:1px solid var(--edge);background:#14202c;color:var(--txt);padding:10px 12px;border-radius:11px;white-space:nowrap}.nav button.active{background:var(--accent);color:#152113;border-color:var(--accent);font-weight:800}
+    .gridline{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--edge);padding:13px 0}.gridline:first-of-type{border:0}.badge{display:inline-block;background:#294050;padding:3px 8px;border-radius:20px;font-size:12px;color:var(--accent)}.role-pending{background:#563b24;color:var(--warn)}.flex{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.right{text-align:right}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:540px}th,td{text-align:left;padding:11px;border-bottom:1px solid var(--edge);vertical-align:top}th{color:var(--sub);font-size:13px}.negative{color:var(--danger)}.positive{color:var(--accent)}.divider{border:0;border-top:1px solid var(--edge);margin:16px 0}
+    .auth{min-height:95vh;display:grid;place-items:center;padding:18px}.auth .panel{width:min(100%,440px)}.hint{background:#27394b;border-radius:12px;padding:12px;color:#d4e3f2;font-size:13px}.notice{border:1px solid #a77c39;background:#342919;border-radius:13px;padding:14px}.toast{position:fixed;bottom:16px;right:16px;left:16px;max-width:520px;margin-left:auto;background:#253d34;color:#fff;padding:13px 17px;border-radius:12px;box-shadow:0 8px 30px #0009;z-index:20}.toast.bad{background:#6f3136}.empty{color:var(--sub);text-align:center;padding:25px;border:1px dashed #526473;border-radius:12px}details summary{cursor:pointer;color:var(--accent)}.print{font-size:13px}
+    @media(max-width:900px){.stats{grid-template-columns:1fr 1fr}.cols{grid-template-columns:1fr}}@media(max-width:560px){.shell{padding:12px}.stats{grid-template-columns:1fr 1fr}.stat{padding:12px}.top{align-items:flex-start}h1{font-size:23px}.panel{padding:14px}}
+  </style>
+</head>
+<body><div id="app"><main class="auth"><div class="panel"><span class="logo">ALUSAF</span><p>Yuklanmoqda...</p></div></main></div><div id="notification" aria-live="polite"></div>
+<script>
+'use strict';
+// AluSaf saytidagi barcha ko'rinish va brauzer kodi shu fayl ichida.
+const app=document.querySelector('#app');
+const S={me:null,projects:[],users:[],assignments:[],expenses:[],payments:[],logs:[],tab:'overview',authMode:'login',workProject:''};
+const categories=['Alukobond','Profil','Samorez','Karkas','Ishchi haqi','Transport','Rover / bukish','Soliq','Boshqa'];
+const h=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=(n)=>new Intl.NumberFormat('uz-UZ',{maximumFractionDigits:0}).format(Number(n||0))+' so‘m';
+const num=n=>new Intl.NumberFormat('uz-UZ',{maximumFractionDigits:2}).format(Number(n||0));
+const time=v=>v?new Intl.DateTimeFormat('uz-UZ',{timeZone:'Asia/Tashkent',dateStyle:'short',timeStyle:'short'}).format(new Date(v)):'—';
+const admin=()=>S.me?.role==='admin';
+const manager=()=>['admin','boss'].includes(S.me?.role);
+const projectName=id=>S.projects.find(x=>x.id===id)?.name||'Obyekt';
+const userName=id=>S.users.find(x=>x.id===id)?.full_name||S.me?.full_name||'Ishchi';
+function notify(msg,bad=false){const n=document.querySelector('#notification');n.innerHTML='<div class="toast '+(bad?'bad':'')+'">'+h(msg)+'</div>';clearTimeout(notify.timer);notify.timer=setTimeout(()=>n.innerHTML='',5000);}
+async function api(action,payload=null){
+  const params=payload===null?'?action='+encodeURIComponent(action):'';
+  let response;
+  try{response=await fetch('/api/index'+params,{method:payload===null?'GET':'POST',credentials:'same-origin',headers:payload===null?{}:{'Content-Type':'application/json'},body:payload===null?undefined:JSON.stringify({action,...payload})});}
+  catch{throw Error('Internet yoki server bilan aloqa yo‘q.');}
+  let data;try{data=await response.json()}catch{throw Error('Server noto‘g‘ri javob berdi. Vercel Logs ni tekshiring.');}
+  if(!response.ok)throw Error(data.error||'Noma’lum xatolik.');
+  return data;
+}
+async function reload(){const data=await api('boot');Object.assign(S,data);render();}
+const optionProjects=(selected='')=>S.projects.map(x=>'<option value="'+h(x.id)+'" '+(x.id===selected?'selected':'')+'>'+h(x.name)+'</option>').join('');
+const optionUsers=()=>S.users.filter(x=>x.role==='worker').map(x=>'<option value="'+h(x.id)+'">'+h(x.full_name)+' (@'+h(x.username)+')</option>').join('');
+function authView(){
+  const reg=S.authMode==='register';
+  return '<main class="auth"><section class="panel stack"><div><div class="logo">ALUSAF</div><h1>'+(reg?'Ro‘yxatdan o‘tish':'Saytga kirish')+'</h1><p class="muted">'+(reg?'Yangi akkaunt dastlab bo‘sh bo‘ladi. Admin sizga lavozim beradi.':'Login va parolni kiriting.')+'</p></div>'+
+    '<form class="form" id="authForm">'+(reg?'<label>Ism-familiya<input name="full_name" required maxlength="80" autocomplete="name"></label><label>Telefon<input name="phone" required maxlength="24" placeholder="+998 90 123 45 67" autocomplete="tel"></label>':'')+
+    '<label>Login<input name="username" required maxlength="32" autocomplete="username" placeholder="'+(reg?'masalan: ali_01':'Asliddin')+'"></label>'+
+    '<label>Parol<input name="password" type="password" minlength="10" maxlength="128" required autocomplete="'+(reg?'new-password':'current-password')+'"></label>'+
+    '<button class="btn" type="submit">'+(reg?'Ro‘yxatdan o‘tish':'Kirish')+'</button></form>'+
+    '<button class="btn outline" data-ui="switch-auth">'+(reg?'Akkauntim bor — kirish':'Yangi akkaunt yaratish')+'</button>'+
+    '<p class="small muted">Administrator logini: Asliddin. Dastlabki parol Vercel sozlamasida belgilanadi.</p></section></main>';
+}
+function render(){
+  if(!S.me){app.innerHTML=authView();return;}
+  const tabs=S.me.role==='pending'?['pending','profile']:manager()?['overview','projects','expenses','payments','team','work','profile']:['projects','work','profile'];
+  const titles={overview:'Hisobot',projects:'Obyektlar',expenses:'Xarajatlar',payments:'To‘lovlar',team:'Jamoa',work:'Kunlik ish',profile:'Parol'};
+  if(!tabs.includes(S.tab))S.tab=tabs[0]||'pending';
+  const nav=tabs.map(t=>'<button type="button" data-ui="tab" data-tab="'+t+'" class="'+(S.tab===t?'active':'')+'">'+titles[t]+'</button>').join('');
+  let content='';
+  switch(S.tab){case 'pending':content='<section class="panel notice"><h2>Admin tasdiqlashini kuting</h2><p>Siz ro‘yxatdan o‘tdingiz. Hozircha hech bir obyekt yoki moliyaviy ma’lumot ko‘rinmaydi. Administrator sizga lavozim beradi.</p></section>';break;
+    case 'overview':content=overviewView();break;case 'projects':content=projectsView();break;case 'expenses':content=expensesView();break;case 'payments':content=paymentsView();break;case 'team':content=teamView();break;case 'work':content=workView();break;case 'profile':content=profileView();break;}
+  app.innerHTML='<div class="shell"><header class="top"><div><div class="logo">ALUSAF</div><div class="muted small">'+h(S.me.full_name)+' · '+h(({admin:'Admin',boss:'Boshliq',worker:'Ishchi',pending:'Tasdiq kutilmoqda'})[S.me.role])+'</div></div><button type="button" class="btn outline sm" data-ui="logout">Chiqish</button></header>'+(nav?'<nav class="nav">'+nav+'</nav>':'')+content+'<footer class="muted small" style="padding:22px 2px">AluSaf CRM v4 · Sinov versiyasi · Barcha ma’lumotlar yangi al_ jadvallarida</footer></div>';
+}
+function sums(p){const payments=S.payments.filter(x=>x.project_id===p.id).reduce((a,x)=>a+Number(x.amount),0);const expenses=S.expenses.filter(x=>x.project_id===p.id).reduce((a,x)=>a+Number(x.total),0);const contract=Number(p.contract_amount)>0?Number(p.contract_amount):Number(p.area_m2)*Number(p.sell_price_m2);return {payments,expenses,contract,balance:payments-expenses,expected:contract-expenses,remaining:contract-payments};}
+function overviewView(){
+  const total=S.projects.reduce((a,p)=>{const s=sums(p);a.contract+=s.contract;a.paid+=s.payments;a.cost+=s.expenses;return a;},{contract:0,paid:0,cost:0});
+  let rows=S.projects.map(p=>{const s=sums(p);return '<tr><td>'+h(p.name)+'</td><td>'+money(s.contract)+'</td><td>'+money(s.payments)+'</td><td>'+money(s.expenses)+'</td><td class="'+(s.expected>=0?'positive':'negative')+'">'+money(s.expected)+'</td><td>'+h(p.status)+'</td></tr>'}).join('');
+  let area=S.expenses.filter(x=>x.category==='Alukobond').reduce((n,x)=>n+Number(x.qty)*Number(x.width_m||0)*Number(x.height_m||0),0);
+  return '<h1>Umumiy boshqaruv</h1><section class="stats"><div class="stat"><span>Shartnomalar</span><b>'+money(total.contract)+'</b></div><div class="stat"><span>Olingan to‘lovlar</span><b>'+money(total.paid)+'</b></div><div class="stat"><span>Yozilgan xarajatlar</span><b>'+money(total.cost)+'</b></div><div class="stat"><span>Shartnoma bo‘yicha foyda*</span><b class="'+(total.contract-total.cost>=0?'positive':'negative')+'">'+money(total.contract-total.cost)+'</b></div></section>'+ 
+    '<section class="panel" style="margin-top:14px"><h2>Obyektlar kesimida</h2><div class="tablewrap"><table><thead><tr><th>Obyekt</th><th>Shartnoma</th><th>Olingan</th><th>Xarajat</th><th>Foyda*</th><th>Holat</th></tr></thead><tbody>'+rows+'</tbody></table></div><hr class="divider"><p class="muted small">* Bu shartnoma summasidan hozirgacha kiritilgan xarajatlarni ayirgan taxminiy natija. Barcha ish haqi, soliq, transport va boshqa xarajatlar yozilmaguncha yakuniy sof foyda emas. Pul oqimi farqi: <b>'+money(total.paid-total.cost)+'</b>. Sotib olingan alukobondning hisobiy maydoni: <b>'+num(area)+' m²</b>.</p></section>';
+}
+function projectsView(){
+  let form=manager()?'<section class="panel"><h2>Yangi obyekt</h2><form id="projectForm" class="form"><label>Obyekt nomi<input name="name" required placeholder="Termiz — xonadon"></label><label>Mijoz ismi<input name="client_name" maxlength="80"></label><label>Telefon<input name="client_phone" type="tel"></label><label>Manzil<input name="address"></label><label>Kvadrat m²<input name="area_m2" type="number" min="0" step="0.001" value="0"></label><label>Bir m² sotuv narxi<input name="sell_price_m2" type="number" min="0" value="0"></label><label>Shartnoma summasi (agar alohida kelishilgan bo‘lsa)<input name="contract_amount" type="number" min="0" value="0"></label><button class="btn">Obyektni saqlash</button></form></section>':'';
+  const list=S.projects.map(p=>{const s=manager()?sums(p):null;return '<article class="panel"><div class="flex" style="justify-content:space-between"><h3 style="margin:0">'+h(p.name)+'</h3><span class="badge">'+h(p.status)+'</span></div><p class="muted">'+h(p.address||'Manzil ko‘rsatilmagan')+' · '+num(p.area_m2)+' m²</p>'+(manager()?'<p>Klient: '+h(p.client_name||'—')+' · '+h(p.client_phone||'—')+'</p><p>Shartnoma: <b>'+money(s.contract)+'</b> · Olingan: <b>'+money(s.payments)+'</b><br>Xarajat: <b>'+money(s.expenses)+'</b> · Qoldiq to‘lov: <b>'+money(s.remaining)+'</b></p><label>Holat<select data-change="status" data-id="'+h(p.id)+'">'+['Yangi','Jarayonda','To‘xtagan','Tugallangan','Topshirildi'].map(x=>'<option '+(p.status===x?'selected':'')+'>'+x+'</option>').join('')+'</select></label>':'')+'</article>'}).join('');
+  return '<h1>Obyektlar</h1><div class="'+(manager()?'cols':'stack')+'">'+form+'<section class="stack">'+(list||'<div class="empty">Hozircha obyekt yo‘q yoki sizga biriktirilmagan.</div>')+'</section></div>';
+}
+function expensesView(){
+  const list=S.expenses.map(x=>'<tr><td>'+h(projectName(x.project_id))+'</td><td>'+h(x.category)+'<div class="small muted">'+h(x.item_name)+'</div></td><td>'+num(x.qty)+' '+h(x.unit)+'</td><td>'+money(x.unit_price)+'</td><td>'+money(x.total)+'</td></tr>').join('');
+  return '<h1>Material va xarajatlar</h1><div class="cols"><section class="panel"><h2>Yangi xarajat</h2><p class="muted small">Har bir xarid o‘sha kundagi haqiqiy narxda kiritiladi.</p><form class="form" id="expenseForm"><label>Obyekt<select required name="project_id"><option value="">Tanlang</option>'+optionProjects()+'</select></label><label>Xarajat turi<select name="category" id="category">'+categories.map(c=>'<option>'+h(c)+'</option>').join('')+'</select></label><label>Material / xarajat nomi<input name="item_name" required placeholder="Masalan: qora 4 mm ACP"></label><label>Miqdor<input name="qty" type="number" required min="0.001" step="0.001" placeholder="Masalan: 22"></label><label>Birlik<select name="unit">'+['list','dona','metr','m²','kg','kun','reys','xizmat'].map(u=>'<option>'+u+'</option>').join('')+'</select></label><label>O‘sha safardagi BIRLIK narxi (so‘m)<input name="unit_price" type="number" required min="0" step="0.01" placeholder="350000"></label><details open id="acpDimensions"><summary>Alukobond list o‘lchami</summary><div class="stack" style="margin-top:9px"><label>Eni (metr)<input name="width_m" type="number" step="0.001" min="0.001" value="1.22"></label><label>Bo‘yi (metr)<input name="height_m" type="number" step="0.001" min="0.001" value="2.44"></label></div></details><label>Izoh<input name="note"></label><button class="btn">Xarajatni saqlash</button></form></section><section class="panel"><h2>Haqiqiy xarajatlar</h2><div class="tablewrap"><table><thead><tr><th>Obyekt</th><th>Tur</th><th>Miqdor</th><th>Birlik narx</th><th>Jami</th></tr></thead><tbody>'+list+'</tbody></table></div>'+(list?'':'<div class="empty">Hali xarajat kiritilmagan.</div>')+'</section></div>';
+}
+function paymentsView(){
+  const rows=S.payments.map(x=>'<tr><td>'+h(projectName(x.project_id))+'</td><td>'+money(x.amount)+'</td><td>'+h(x.note||'—')+'</td><td>'+time(x.created_at)+'</td></tr>').join('');
+  return '<h1>Mijoz to‘lovlari</h1><div class="cols"><section class="panel"><h2>To‘lov kiritish</h2><form id="paymentForm" class="form"><label>Obyekt<select name="project_id" required><option value="">Tanlang</option>'+optionProjects()+'</select></label><label>Olingan summa (so‘m)<input name="amount" type="number" min="1" required></label><label>Izoh<input name="note" placeholder="Avans, qolgan to‘lov..."></label><button class="btn">Saqlash</button></form></section><section class="panel"><h2>To‘lovlar tarixi</h2><div class="tablewrap"><table><thead><tr><th>Obyekt</th><th>Summa</th><th>Izoh</th><th>Sana</th></tr></thead><tbody>'+rows+'</tbody></table></div></section></div>';
+}
+function teamView(){
+  const users=S.users.map(u=>'<div class="gridline"><div><strong>'+h(u.full_name)+'</strong> <span class="badge '+(u.role==='pending'?'role-pending':'')+'">'+h(u.role)+'</span><div class="muted small">@'+h(u.username)+' · '+h(u.phone||'Telefon yo‘q')+'</div></div>'+(admin()&&u.role!=='admin'?'<label>Lavozim<select data-change="role" data-id="'+h(u.id)+'">'+['pending','worker','boss'].map(r=>'<option value="'+r+'" '+(u.role===r?'selected':'')+'>'+({pending:'Kutmoqda',worker:'Ishchi',boss:'Boshliq'})[r]+'</option>').join('')+'</select></label>':'')+'</div>').join('');
+  const assign=admin()?'<section class="panel"><h2>Ishchini obyektga biriktirish</h2><form class="form" id="assignForm"><label>Ishchi<select name="user_id" required><option value="">Tanlang</option>'+optionUsers()+'</select></label><label>Obyekt<select name="project_id" required><option value="">Tanlang</option>'+optionProjects()+'</select></label><button class="btn">Biriktirish</button></form><h3 style="margin-top:18px">Biriktirilganlar</h3>'+(S.assignments.map(a=>'<div class="gridline"><span>'+h(userName(a.user_id))+' → '+h(projectName(a.project_id))+'</span><button class="btn outline sm" data-ui="unassign" data-user="'+h(a.user_id)+'" data-project="'+h(a.project_id)+'">Ajratish</button></div>').join('')||'<p class="muted">Hozircha hech kim biriktirilmagan.</p>')+'</section>':'';
+  const workerRows=S.logs.map(x=>'<tr><td>'+h(userName(x.user_id))+'</td><td>'+h(projectName(x.project_id))+'</td><td>'+h(x.work_date)+'</td><td>'+num(x.completed_m2)+'</td><td>'+time(x.arrived_at)+'</td><td>'+time(x.left_at)+'</td><td>'+h(x.note||'—')+'</td></tr>').join('');
+  return '<h1>Jamoa va nazorat</h1><div class="cols"><div class="stack"><section class="panel"><h2>Xodimlar</h2>'+users+'</section>'+assign+'</div><section class="panel"><h2>Ishchilar hisoboti</h2><div class="tablewrap"><table><thead><tr><th>Kim</th><th>Obyekt</th><th>Kun</th><th>m²</th><th>Keldi</th><th>Ketdi</th><th>Izoh</th></tr></thead><tbody>'+workerRows+'</tbody></table></div></section></div>';
+}
+function workView(){
+  const my=S.logs.filter(x=>x.user_id===S.me.id);
+  const rows=my.map(x=>'<div class="gridline"><div><strong>'+h(projectName(x.project_id))+' · '+h(x.work_date)+'</strong><div class="muted small">'+time(x.arrived_at)+' → '+time(x.left_at)+'</div><div>'+num(x.completed_m2)+' m² · '+h(x.note||'Izoh yo‘q')+'</div></div></div>').join('');
+  return '<h1>Bugungi ish</h1><div class="cols"><section class="panel"><h2>Kelish, ketish va hajm</h2><form class="form" id="workForm"><label>Obyekt<select required name="project_id"><option value="">Tanlang</option>'+optionProjects(S.workProject)+'</select></label><div class="flex"><button class="btn" type="button" data-ui="work-start">Ish boshladim</button><button class="btn outline" type="button" data-ui="work-end">Ishdan ketdim</button></div><hr class="divider"><label>Bugun bajarilgan jami kvadrat (m²)<input name="completed_m2" type="number" min="0" step="0.001" value="0"></label><label>Bugun nima qildingiz?<textarea name="note" maxlength="400" placeholder="Masalan: 12 m² karkaz, 8 m² qoplama"></textarea></label><button class="btn">Kunlik hisobotni saqlash</button></form><p class="muted small">Kelish/ketish vaqti telefon soatidan emas, server tomonidan yoziladi. Bir obyekt uchun kuniga bitta hisobot.</p></section><section class="panel"><h2>Mening hisobotlarim</h2>'+(rows||'<div class="empty">Hali hisobot yo‘q.</div>')+'</section></div>';
+}
+function profileView(){return '<h1>Parolni almashtirish</h1><section class="panel" style="max-width:470px"><form class="form" id="passwordForm"><label>Eski parol<input type="password" name="old_password" autocomplete="current-password" required></label><label>Yangi parol (kamida 10 belgi)<input type="password" name="new_password" minlength="10" maxlength="128" autocomplete="new-password" required></label><button class="btn">Parolni yangilash</button></form><p class="muted small" style="margin-top:12px">Boshqa qurilmalardagi eski sessiyalar avtomatik bekor qilinadi.</p></section>';}
+function formData(form){return Object.fromEntries(new FormData(form).entries());}
+async function submitHandler(e){
+  const form=e.target;if(!(form instanceof HTMLFormElement))return;
+  const id=form.id;
+  if(!['authForm','projectForm','expenseForm','paymentForm','assignForm','workForm','passwordForm'].includes(id))return;
+  e.preventDefault();const btn=form.querySelector('button[type="submit"],button.btn:not([type])');if(btn)btn.disabled=true;
+  const x=formData(form);
+  try{
+    if(id==='authForm'){
+      if(S.authMode==='register'){await api('register',x);S.authMode='login';render();notify('Akkaunt ochildi. Endi login bilan kiring.');return;}
+      await api('login',x);await reload();notify('Xush kelibsiz!');return;
+    }
+    const actions={projectForm:'project',expenseForm:'expense',paymentForm:'payment',assignForm:'assign',workForm:'work_save',passwordForm:'password'};
+    if(id==='workForm')S.workProject=x.project_id;
+    await api(actions[id],x);if(id!=='passwordForm')await reload();else form.reset();notify('Muvaffaqiyatli saqlandi.');
+  }catch(err){notify(err.message,true);}finally{if(btn)btn.disabled=false;}
+}
+document.addEventListener('submit',submitHandler);
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-ui]');if(!b)return;const ui=b.dataset.ui;
+  try{
+    if(ui==='switch-auth'){S.authMode=S.authMode==='login'?'register':'login';render();return;}
+    if(ui==='tab'){S.tab=b.dataset.tab;render();return;}
+    if(ui==='logout'){await api('logout',{});S.me=null;S.authMode='login';render();return;}
+    if(ui==='work-start'||ui==='work-end'){
+      const form=document.querySelector('#workForm');const data=formData(form);if(!data.project_id)throw Error('Avval obyektni tanlang.');
+      S.workProject=data.project_id;b.disabled=true;try{await api(ui==='work-start'?'work_start':'work_end',{project_id:data.project_id});await reload();notify('Vaqt yozildi.');}finally{b.disabled=false;}return;
+    }
+    if(ui==='unassign'){if(!confirm('Ishchini shu obyektdan ajratasizmi?'))return;await api('assign',{user_id:b.dataset.user,project_id:b.dataset.project,assigned:false});await reload();notify('Ishchi obyektdan ajratildi.');return;}
+  }catch(err){notify(err.message,true);}
+});
+document.addEventListener('change',async e=>{
+  const el=e.target;if(!el.dataset.change)return;
+  try{
+    if(el.dataset.change==='role'){if(!confirm('Lavozimni '+el.value+' ga o‘zgartirasizmi?')){render();return;}await api('role',{user_id:el.dataset.id,role:el.value});}
+    if(el.dataset.change==='status')await api('project_status',{project_id:el.dataset.id,status:el.value});
+    await reload();notify('Yangilandi.');
+  }catch(err){notify(err.message,true);await reload();}
+});
+// Sahifa ilk ochilganda sessiyani aniqlash.
+reload().catch(err=>{S.me=null;render();if(!/Avval tizimga kiring|Sessiya tugagan/.test(err.message))notify(err.message,true);});
+</script>
+</body>
+</html>
